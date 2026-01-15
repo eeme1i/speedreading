@@ -33,6 +33,7 @@ export default function Read() {
 	const [autoScaleEnabled, setAutoScaleEnabled] = useState(false);
 	const [targetWpm, setTargetWpm] = useState(600);
 	const [rampSeconds, setRampSeconds] = useState(30);
+	const [highlightColor, setHighlightColor] = useState("#ef4444");
 	const fileInputRef = useRef<HTMLInputElement | null>(null);
 
 	// Sample text for speed reading
@@ -49,6 +50,7 @@ export default function Read() {
 		const storedAutoScale = retrieveAutoScaleFromLocalStorage();
 		const storedTarget = retrieveTargetWpmFromLocalStorage();
 		const storedRampSeconds = retrieveRampSecondsFromLocalStorage();
+		const storedHighlightColor = retrieveHighlightColorFromLocalStorage();
 		if (storedAutoScale !== null) {
 			setAutoScaleEnabled(storedAutoScale);
 		}
@@ -57,6 +59,9 @@ export default function Read() {
 		}
 		if (storedRampSeconds !== null) {
 			setRampSeconds(storedRampSeconds);
+		}
+		if (storedHighlightColor !== null) {
+			setHighlightColor(storedHighlightColor);
 		}
 	}, []);
 
@@ -176,7 +181,11 @@ export default function Read() {
 	return (
 		<div className="flex flex-col items-center justify-between w-full h-full">
 			<div></div>
-			<WordDisplay word={words[currentWordIndex] || ""} textSize={textSize} />
+			<WordDisplay
+				word={words[currentWordIndex] || ""}
+				textSize={textSize}
+				highlightColor={highlightColor}
+			/>
 			<Controls
 				wpm={wpm}
 				currentWpm={currentWpm}
@@ -192,6 +201,8 @@ export default function Read() {
 				setTargetWpm={setTargetWpm}
 				rampSeconds={rampSeconds}
 				setRampSeconds={setRampSeconds}
+				highlightColor={highlightColor}
+				setHighlightColor={setHighlightColor}
 			/>
 			{isDialogOpen ? (
 				<div className="fixed inset-0 z-20 flex items-center justify-center bg-black/70 px-4">
@@ -208,8 +219,8 @@ export default function Read() {
 							</button>
 						</div>
 						<p className="mt-2 text-sm text-neutral-500">
-							Paste your text below or upload a .txt file to replace the reader
-							content.
+							Paste your text below or upload a .txt or .md file to replace the
+							reader content.
 						</p>
 						<textarea
 							className="mt-4 h-48 w-full resize-none rounded-lg border border-neutral-700 bg-neutral-950 p-3 text-sm text-neutral-100 outline-none focus:border-neutral-500"
@@ -222,7 +233,7 @@ export default function Read() {
 								<input
 									ref={fileInputRef}
 									type="file"
-									accept=".txt,text/plain"
+									accept=".txt,.md,text/plain"
 									onChange={(event) => {
 										const file = event.target.files?.[0];
 										if (file) {
@@ -232,7 +243,7 @@ export default function Read() {
 									className="text-sm text-neutral-400 file:mr-3 file:rounded-md file:border-0 file:bg-neutral-800 file:px-3 file:py-2 file:text-sm file:text-neutral-200 hover:file:bg-neutral-700 cursor-pointer w-max"
 								/>
 								<span className="text-xs text-neutral-500">
-									Supported: .txt
+									Supported: .txt, .md
 								</span>
 							</div>
 							<div className="flex items-center gap-3">
@@ -260,9 +271,10 @@ export default function Read() {
 type WordDisplayProps = {
 	word: string;
 	textSize: number;
+	highlightColor: string;
 };
 
-function WordDisplay({ word, textSize }: WordDisplayProps) {
+function WordDisplay({ word, textSize, highlightColor }: WordDisplayProps) {
 	// Calculate Optimal Recognition Point (ORP)
 	// Typically around 1/3 into the word (slightly left of center)
 	const getORPIndex = (word: string): number => {
@@ -294,7 +306,7 @@ function WordDisplay({ word, textSize }: WordDisplayProps) {
 				</span>
 
 				{/* Optimal Recognition Point - highlighted */}
-				<span className="text-red-500">{orpChar}</span>
+				<span style={{ color: highlightColor }}>{orpChar}</span>
 
 				{/* Right side of word */}
 				<span
@@ -323,6 +335,8 @@ type ControlProps = {
 	setTargetWpm: (wpm: number) => void;
 	rampSeconds: number;
 	setRampSeconds: (seconds: number) => void;
+	highlightColor: string;
+	setHighlightColor: (color: string) => void;
 };
 
 function storeWpmInLocalStorage(wpm: number) {
@@ -352,6 +366,12 @@ function storeTargetWpmInLocalStorage(target: number) {
 function storeRampSecondsInLocalStorage(seconds: number) {
 	if (typeof window !== "undefined" && window.localStorage) {
 		localStorage.setItem("autoScaleRampSeconds", seconds.toString());
+	}
+}
+
+function storeHighlightColorInLocalStorage(color: string) {
+	if (typeof window !== "undefined" && window.localStorage) {
+		localStorage.setItem("highlightColor", color);
 	}
 }
 
@@ -416,6 +436,16 @@ function retrieveRampSecondsFromLocalStorage(): number | null {
 	return null;
 }
 
+function retrieveHighlightColorFromLocalStorage(): string | null {
+	if (typeof window !== "undefined" && window.localStorage) {
+		const color = localStorage.getItem("highlightColor");
+		if (color) {
+			return color;
+		}
+	}
+	return null;
+}
+
 function Controls({
 	wpm,
 	currentWpm,
@@ -432,6 +462,8 @@ function Controls({
 	setTargetWpm,
 	rampSeconds,
 	setRampSeconds,
+	highlightColor,
+	setHighlightColor,
 }: ControlProps) {
 	const UPDATE_STEP = 50;
 	const MAX_WPM = 1500;
@@ -626,6 +658,19 @@ function Controls({
 					>
 						<PlusIcon size={18} />
 					</button>
+				</div>
+				<div className="flex gap-2 items-center">
+					<span>Highlight</span>
+					<input
+						type="color"
+						value={highlightColor}
+						onChange={(event) => {
+							setHighlightColor(event.target.value);
+							storeHighlightColorInLocalStorage(event.target.value);
+						}}
+						className="w-6 h-6 cursor-pointer rounded border border-neutral-700"
+						title="Choose highlight color for ORP character"
+					/>
 				</div>
 			</div>
 			<div className="flex flex-wrap items-center justify-center gap-3 text-xs text-neutral-500">
