@@ -533,8 +533,22 @@ function Controls({
 							type="number"
 							value={wpm}
 							onChange={(e) => {
+								const newValue = e.target.value;
+								// Allow empty string while editing
+								if (newValue === "") {
+									setWpm(0);
+								} else {
+									const parsed = Number(newValue);
+									if (!isNaN(parsed)) {
+										setWpm(parsed);
+									}
+								}
+							}}
+							onBlur={(e) => {
 								const newValue = Number(e.target.value);
-								if (!isNaN(newValue)) {
+								if (isNaN(newValue) || newValue === 0) {
+									setWpm(300); // Reset to default if invalid
+								} else {
 									const clampedValue = Math.max(
 										MIN_WPM,
 										Math.min(MAX_WPM, newValue)
@@ -546,7 +560,7 @@ function Controls({
 							min={MIN_WPM}
 							max={MAX_WPM}
 							className="text-neutral-50 text-center border-none outline-none bg-transparent p-0 m-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-							style={{ width: `${wpm.toString().length}ch` }}
+							style={{ width: `${Math.max(wpm.toString().length, 1)}ch` }}
 						/>{" "}
 						WPM
 					</span>
@@ -573,7 +587,31 @@ function Controls({
 						<input
 							type="number"
 							value={textSize}
-							onChange={(e) => updateTextSize(Number(e.target.value))}
+							onChange={(e) => {
+								const newValue = e.target.value;
+								// Allow empty string while editing
+								if (newValue === "") {
+									setTextSize(0);
+								} else {
+									const parsed = Number(newValue);
+									if (!isNaN(parsed)) {
+										setTextSize(parsed);
+									}
+								}
+							}}
+							onBlur={(e) => {
+								const newValue = Number(e.target.value);
+								if (isNaN(newValue) || newValue === 0) {
+									setTextSize(24); // Reset to default if invalid
+								} else {
+									const clampedSize = Math.max(
+										MIN_TEXT_SIZE,
+										Math.min(MAX_TEXT_SIZE, newValue)
+									);
+									setTextSize(clampedSize);
+									storeTextSizeInLocalStorage(clampedSize);
+								}
+							}}
 							min={MIN_TEXT_SIZE}
 							max={MAX_TEXT_SIZE}
 							className="text-neutral-50 text-center border-none outline-none bg-transparent p-0 m-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
@@ -614,8 +652,22 @@ function Controls({
 						type="number"
 						value={targetWpm}
 						onChange={(event) => {
+							const value = event.target.value;
+							// Allow empty string while editing
+							if (value === "") {
+								setTargetWpm(0);
+							} else {
+								const parsed = Number(value);
+								if (!isNaN(parsed)) {
+									setTargetWpm(parsed);
+								}
+							}
+						}}
+						onBlur={(event) => {
 							const value = Number(event.target.value);
-							if (!isNaN(value)) {
+							if (isNaN(value) || value === 0) {
+								setTargetWpm(600); // Reset to default if invalid
+							} else {
 								const clamped = Math.max(
 									MIN_TARGET_WPM,
 									Math.min(MAX_WPM, value)
@@ -636,8 +688,22 @@ function Controls({
 						type="number"
 						value={rampSeconds}
 						onChange={(event) => {
+							const value = event.target.value;
+							// Allow empty string while editing
+							if (value === "") {
+								setRampSeconds(0);
+							} else {
+								const parsed = Number(value);
+								if (!isNaN(parsed)) {
+									setRampSeconds(parsed);
+								}
+							}
+						}}
+						onBlur={(event) => {
 							const value = Number(event.target.value);
-							if (!isNaN(value)) {
+							if (isNaN(value) || value === 0) {
+								setRampSeconds(30); // Reset to default if invalid
+							} else {
 								const clamped = Math.max(
 									MIN_RAMP_SECONDS,
 									Math.min(MAX_RAMP_SECONDS, value)
