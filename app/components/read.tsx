@@ -6,7 +6,120 @@ import {
 	PlayIcon,
 	PauseIcon,
 	XIcon,
+	Currency,
 } from "lucide-react";
+
+const MIN_WPM = 1;
+const MAX_WPM = 1500;
+
+function clampWpm(value: number) {
+	return Math.max(MIN_WPM, Math.min(MAX_WPM, value));
+}
+
+function formatDuration(totalSeconds: number) {
+	const rounded = Math.max(0, Math.ceil(totalSeconds));
+	if (rounded < 60) {
+		return `${rounded}s`;
+	}
+	const minutes = Math.floor(rounded / 60);
+	const seconds = rounded % 60;
+	if (minutes < 60) {
+		return `${minutes}m ${seconds}s`;
+	}
+	const hours = Math.floor(minutes / 60);
+	const remainingMinutes = minutes % 60;
+	return `${hours}h ${remainingMinutes}m`;
+}
+
+function estimateReadTimeSeconds({
+	wordsRemaining,
+	wpm,
+	currentWpm,
+	autoScaleEnabled,
+	targetWpm,
+	rampSeconds,
+	isPlaying,
+	rampStartWpm,
+	rampStartTimeMs,
+}: {
+	wordsRemaining: number;
+	wpm: number;
+	currentWpm: number;
+	autoScaleEnabled: boolean;
+	targetWpm: number;
+	rampSeconds: number;
+	isPlaying: boolean;
+	rampStartWpm: number;
+	rampStartTimeMs: number | null;
+}) {
+	if (wordsRemaining <= 0) {
+		return 0;
+	}
+
+	const clampedTarget = Math.max(clampWpm(wpm), clampWpm(targetWpm));
+	const durationSeconds = Math.max(0, rampSeconds);
+
+	const computeRampSeconds = (
+		remainingWords: number,
+		startWpm: number,
+		endWpm: number,
+		seconds: number,
+	) => {
+		const start = clampWpm(startWpm);
+		const target = Math.max(start, clampWpm(endWpm));
+		if (seconds <= 0 || start === target) {
+			return remainingWords / (target / 60);
+		}
+
+		const rampWords = ((start + target) / 2) * (seconds / 60);
+		if (remainingWords >= rampWords) {
+			return seconds + (remainingWords - rampWords) / (target / 60);
+		}
+
+		const a = (target - start) / (2 * seconds);
+		const b = start;
+		const c = -remainingWords * 60;
+		if (a === 0) {
+			return remainingWords / (b / 60);
+		}
+		const discriminant = b * b - 4 * a * c;
+		const t = (-b + Math.sqrt(Math.max(discriminant, 0))) / (2 * a);
+		return Math.max(0, t);
+	};
+
+	if (!autoScaleEnabled) {
+		const baseWpm = isPlaying ? clampWpm(currentWpm) : clampWpm(wpm);
+		return wordsRemaining / (baseWpm / 60);
+	}
+
+	if (isPlaying) {
+		const startedAt = rampStartTimeMs ?? Date.now();
+		const elapsedSeconds = Math.max(
+			0,
+			Math.min(durationSeconds, (Date.now() - startedAt) / 1000),
+		);
+		if (elapsedSeconds >= durationSeconds) {
+			return wordsRemaining / (clampedTarget / 60);
+		}
+		const start = clampWpm(rampStartWpm);
+		const progress = durationSeconds > 0 ? elapsedSeconds / durationSeconds : 1;
+		const rampStartNow = start + (clampedTarget - start) * progress;
+		const remainingDuration = Math.max(0, durationSeconds - elapsedSeconds);
+		return computeRampSeconds(
+			wordsRemaining,
+			rampStartNow,
+			clampedTarget,
+			remainingDuration,
+		);
+	}
+
+	return computeRampSeconds(
+		wordsRemaining,
+		wpm,
+		clampedTarget,
+		durationSeconds,
+	);
+}
 export default function Read() {
 	// words per minute - start with default value
 	const [wpm, setWpm] = useState(300);
@@ -38,7 +151,7 @@ export default function Read() {
 
 	// Sample text for speed reading
 	const [text, setText] = useState(
-		"The quick brown fox jumps over the lazy dog. Speed reading helps you read faster while maintaining comprehension. Practice makes perfect."
+		"The quick brown fox jumps over the lazy dog. Speed reading helps you read faster while maintaining comprehension. Practice makes perfect.",
 	);
 	const [currentWordIndex, setCurrentWordIndex] = useState(0);
 
@@ -67,6 +180,7 @@ export default function Read() {
 
 	// Split text into words
 	const words = text.split(/\s+/).filter((word) => word.length > 0);
+	const wordsRemaining = Math.max(words.length - currentWordIndex, 0);
 
 	// Ref to capture the starting WPM when playback begins
 	const rampStartWpmRef = useRef(wpm);
@@ -126,6 +240,20 @@ export default function Read() {
 		}
 	}, [isPlaying, wpm]);
 
+	const estimatedSeconds = estimateReadTimeSeconds({
+		wordsRemaining,
+		wpm,
+		currentWpm,
+		autoScaleEnabled,
+		targetWpm,
+		rampSeconds,
+		isPlaying,
+		rampStartWpm: rampStartWpmRef.current,
+		rampStartTimeMs: rampStartTimeRef.current,
+	});
+	const estimatedLabel =
+		words.length > 0 ? formatDuration(estimatedSeconds) : "—";
+
 	// Auto-scale effect - ramps WPM from start to target over time
 	useEffect(() => {
 		if (!isPlaying || !autoScaleEnabled) {
@@ -142,7 +270,7 @@ export default function Read() {
 			const elapsed = Date.now() - startedAt;
 			const progress = Math.min(elapsed / durationMs, 1);
 			const nextWpm = Math.round(
-				startWpm + (clampedTarget - startWpm) * progress
+				startWpm + (clampedTarget - startWpm) * progress,
 			);
 			setCurrentWpm(nextWpm);
 			if (progress >= 1) {
@@ -179,8 +307,14 @@ export default function Read() {
 	}
 
 	return (
-		<div className="flex flex-col items-center justify-between w-full h-full">
-			<div></div>
+		<div className="flex flex-col items-center justify-between w-full h-full pb-2">
+			<ProgressBar
+				progress={words.length > 0 ? currentWordIndex / (words.length - 1) : 0}
+				length={words.length}
+				current={currentWordIndex + 1}
+				highlightColor={highlightColor}
+				estimatedLabel={estimatedLabel}
+			/>
 			<WordDisplay
 				word={words[currentWordIndex] || ""}
 				textSize={textSize}
@@ -203,6 +337,7 @@ export default function Read() {
 				setRampSeconds={setRampSeconds}
 				highlightColor={highlightColor}
 				setHighlightColor={setHighlightColor}
+				estimatedLabel={estimatedLabel}
 			/>
 			{isDialogOpen ? (
 				<div className="fixed inset-0 z-20 flex items-center justify-center bg-black/70 px-4">
@@ -337,6 +472,7 @@ type ControlProps = {
 	setRampSeconds: (seconds: number) => void;
 	highlightColor: string;
 	setHighlightColor: (color: string) => void;
+	estimatedLabel: string;
 };
 
 function storeWpmInLocalStorage(wpm: number) {
@@ -464,10 +600,9 @@ function Controls({
 	setRampSeconds,
 	highlightColor,
 	setHighlightColor,
+	estimatedLabel,
 }: ControlProps) {
 	const UPDATE_STEP = 50;
-	const MAX_WPM = 1500;
-	const MIN_WPM = 1;
 	const MIN_TARGET_WPM = 1;
 	const MIN_RAMP_SECONDS = 1;
 	const MAX_RAMP_SECONDS = 180;
@@ -489,7 +624,7 @@ function Controls({
 	function updateTextSize(newSize: number) {
 		const clampedSize = Math.max(
 			MIN_TEXT_SIZE,
-			Math.min(MAX_TEXT_SIZE, newSize)
+			Math.min(MAX_TEXT_SIZE, newSize),
 		);
 		setTextSize(clampedSize);
 		storeTextSizeInLocalStorage(clampedSize);
@@ -515,7 +650,7 @@ function Controls({
 				updateTextSize(textSize - TEXT_SIZE_STEP);
 			}
 		},
-		[isPlaying, wpm, textSize]
+		[isPlaying, wpm, textSize],
 	);
 
 	useEffect(() => {
@@ -583,7 +718,7 @@ function Controls({
 								} else {
 									const clampedValue = Math.max(
 										MIN_WPM,
-										Math.min(MAX_WPM, newValue)
+										Math.min(MAX_WPM, newValue),
 									);
 									setWpm(clampedValue);
 									storeWpmInLocalStorage(clampedValue);
@@ -638,7 +773,7 @@ function Controls({
 								} else {
 									const clampedSize = Math.max(
 										MIN_TEXT_SIZE,
-										Math.min(MAX_TEXT_SIZE, newValue)
+										Math.min(MAX_TEXT_SIZE, newValue),
 									);
 									setTextSize(clampedSize);
 									storeTextSizeInLocalStorage(clampedSize);
@@ -715,7 +850,7 @@ function Controls({
 							} else {
 								const clamped = Math.max(
 									MIN_TARGET_WPM,
-									Math.min(MAX_WPM, value)
+									Math.min(MAX_WPM, value),
 								);
 								setTargetWpm(clamped);
 								storeTargetWpmInLocalStorage(clamped);
@@ -751,7 +886,7 @@ function Controls({
 							} else {
 								const clamped = Math.max(
 									MIN_RAMP_SECONDS,
-									Math.min(MAX_RAMP_SECONDS, value)
+									Math.min(MAX_RAMP_SECONDS, value),
 								);
 								setRampSeconds(clamped);
 								storeRampSecondsInLocalStorage(clamped);
@@ -766,6 +901,43 @@ function Controls({
 			</div>
 			<div className="text-center text-xs text-neutral-600">
 				<p>Space: Play/Pause | ← →: Speed | ↑ ↓: Text Size</p>
+			</div>
+		</div>
+	);
+}
+
+type ProgressBarProps = {
+	progress: number; // 0 to 1
+	length: number;
+	current: number;
+	highlightColor: string;
+	estimatedLabel: string;
+};
+
+function ProgressBar({
+	progress,
+	length,
+	current,
+	highlightColor,
+	estimatedLabel,
+}: ProgressBarProps) {
+	return (
+		<div className="w-full h-max flex flex-col gap-2">
+			<div className="relative w-full h-1 bg-neutral-800 rounded-full flex flex-col gap-2">
+				<div
+					className="absolute inset-0 w-full h-1 transition-all duration-200 ease-out"
+					style={{
+						width: `${Math.min(Math.max(progress, 0), 1) * 100}%`,
+						backgroundColor: highlightColor,
+					}}
+				></div>
+			</div>
+			<div className="w-full grid grid-cols-3 items-center px-2">
+				<span className="text-xs text-neutral-400 text-left">{current}</span>
+				<span className="text-xs text-neutral-400 text-center">
+					Est. {estimatedLabel} remaining
+				</span>
+				<span className="text-xs text-neutral-400 text-right">{length}</span>
 			</div>
 		</div>
 	);
