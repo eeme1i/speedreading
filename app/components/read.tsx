@@ -1,13 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import {
-	Minus,
-	MinusIcon,
-	PlusIcon,
-	PlayIcon,
-	PauseIcon,
-	XIcon,
-	Currency,
-} from "lucide-react";
+import { MinusIcon, PlusIcon, PlayIcon, PauseIcon, XIcon } from "lucide-react";
 
 const MIN_WPM = 1;
 const MAX_WPM = 1500;
